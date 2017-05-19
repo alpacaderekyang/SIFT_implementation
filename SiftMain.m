@@ -291,3 +291,5 @@ end
 locs = locs(1:FeatureCount,:);
 figure,imshow(uint8(imgtemp6*255));
 fprintf('Number of feature points... %d\n',FeatureCount);
+
+showkeys(img,locs);
