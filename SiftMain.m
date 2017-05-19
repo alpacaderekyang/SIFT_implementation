@@ -15,20 +15,26 @@ SigmaOrigin = 2^0.5; % default sigma
 %...default sigma in paper = 1.6?
 
 ScaleFactor = 2^(1/ScaleSpaceNum);
+%...ScaleFactor is k in paper
 StackNum = ScaleSpaceNum + 3; % number of stacks = number of scale space intervals + 3
 
 OctaveNum = 3;
 %...number of octave layers
+
 GaussianFilterSize = 21;
-OctaveImage = {OctaveNum,StackNum}; % save the Gaussian-filtered results of image
-OctaveImageDiff = {OctaveNum,StackNum-1}; % save the Difference of Gaussian-filtered results of image
+OctaveImage = {OctaveNum,StackNum}; 
+% save the Gaussian-filtered results of image
+OctaveImageDiff = {OctaveNum,StackNum-1}; 
+% save the Difference of Gaussian-filtered results of image
 %...with cell array
 
 %% Gaussian Convolution of Images in Each Octave
 ImgOctave = cell(OctaveNum,1);
+%...ImgOctave stores original img and downsampled imgs
 for Octave = 1:OctaveNum
     Sigma = SigmaOrigin * 2^(Octave-1); % when up to a new octave, double the sigma
     ImgOctave{Octave} = imresize(img, 2^(-(Octave-1)));
+    %...down sample image
     for s = 1:StackNum
         SigmaScale = Sigma * ScaleFactor^(s-2);
         % calculate Guassian kernel
@@ -37,14 +43,17 @@ for Octave = 1:OctaveNum
         OctaveImage{Octave,s} = imfilter(ImgOctave{Octave}, GaussianFilter,'symmetric');
     end  
 end
+
 % calculate difference of Gaussian (in original paper eq.1)
 for Octave = 1:OctaveNum
     for s = 1:StackNum-1
         OctaveImageDiff{Octave,s} = OctaveImage{Octave,s+1} - OctaveImage{Octave,s};
     end
 end
+
 %% Find the local minima and maxima between stacks
 DiffMinMaxMap = cell(OctaveNum,StackNum-3);
+%...store min,max of DoG
 for Octave = 1:OctaveNum
     for s = 2:size(OctaveImageDiff,2)-1
         CompareDiffImg = zeros(size(OctaveImage{Octave,1},1)-2,size(OctaveImage{Octave,1},2)-2,27);
@@ -67,6 +76,7 @@ end
 %% Accurate keypoint localization
 UnstableExtremaThreshold = 0.03; % set the threshold as 0.03 (the same as the original paper)
 DiffMinMaxMapAccurate = DiffMinMaxMap;
+
 for Octave = 1:OctaveNum
     Sigma = SigmaOrigin * 2^(Octave-1);
     for DiffMinMaxMapIndx = 1:size(DiffMinMaxMap,2)
