@@ -6,16 +6,23 @@ img = imread('lena.jpg');
 if ColorChannel > 1
     img = rgb2gray(img);
 end
-img = double(img)/255;
+img = double(img)/255;%change to gray scale, double.
+
 ScaleSpaceNum = 3; % number of scale space intervals
+%...3 , not 2
+
 SigmaOrigin = 2^0.5; % default sigma
+%...default sigma in paper = 1.6?
+
 ScaleFactor = 2^(1/ScaleSpaceNum);
 StackNum = ScaleSpaceNum + 3; % number of stacks = number of scale space intervals + 3
+
 OctaveNum = 3;
+%...number of octave layers
 GaussianFilterSize = 21;
 OctaveImage = {OctaveNum,StackNum}; % save the Gaussian-filtered results of image
 OctaveImageDiff = {OctaveNum,StackNum-1}; % save the Difference of Gaussian-filtered results of image
-
+%...with cell array
 
 %% Gaussian Convolution of Images in Each Octave
 ImgOctave = cell(OctaveNum,1);
