@@ -1,7 +1,9 @@
 %% Initialization
 % Here, the x-axis correspond to coloum, while the y-axis correspond to row
-clear all; close all;
+%clear all; %close all;
 img = imread('lena.jpg');
+%img = imrotate(img,15);
+img = imadd(img,80);
 [~,~,ColorChannel] = size(img);
 if ColorChannel > 1
     img = rgb2gray(img);
@@ -18,10 +20,10 @@ ScaleFactor = 2^(1/ScaleSpaceNum);
 %...ScaleFactor is k in paper
 StackNum = ScaleSpaceNum + 3; % number of stacks = number of scale space intervals + 3
 
-OctaveNum = 3;
+OctaveNum = 5;
 %...number of octave layers
 
-GaussianFilterSize = 21;
+GaussianFilterSize = 21; %...why 21?
 OctaveImage = {OctaveNum,StackNum}; 
 % save the Gaussian-filtered results of image
 OctaveImageDiff = {OctaveNum,StackNum-1}; 
@@ -32,7 +34,8 @@ OctaveImageDiff = {OctaveNum,StackNum-1};
 ImgOctave = cell(OctaveNum,1);
 %...ImgOctave stores original img and downsampled imgs
 for Octave = 1:OctaveNum
-    Sigma = SigmaOrigin * 2^(Octave-1); % when up to a new octave, double the sigma
+    %Sigma = SigmaOrigin * 2^(Octave-1); % when up to a new octave, double the sigma
+    Sigma = SigmaOrigin;
     ImgOctave{Octave} = imresize(img, 2^(-(Octave-1)));
     %...down sample image
     for s = 1:StackNum
@@ -102,6 +105,7 @@ for Octave = 1:OctaveNum
         end
     end
 end
+
 %% Eliminating edge responses
 gamma = 10; % set the threshold gamma as 10 (the same as the original paper)
 DetermineThreshold = (gamma + 1)^2 / gamma;
@@ -136,6 +140,7 @@ end
 % the patch size for feature transformation is 16;
 DominantOrientation = cell(size(DiffMinMaxMap));
 SIFT = cell(size(DiffMinMaxMap));
+FeatureCount = 0;
 for Octave = 1:OctaveNum
     Sigma = SigmaOrigin * 2^(Octave-1); % when up to a new octave, double the sigma
     for DiffMinMaxMapIndx = 1:size(DiffMinMaxMap,2)
@@ -152,7 +157,8 @@ for Octave = 1:OctaveNum
         for ssc = 1:length(SSCindx)
             [Row,Col] = ind2sub([size(Map,1),size(Map,2)], SSCindx(ssc));
             Row = Row+1; Col = Col+1; % offset = [1,1];
-            if (Row <= 10) || (Row >= size(GaussianSmoothedImage,1)-8) || (Col <= 10) || (Col >= size(GaussianSmoothedImage,2)-8)
+            %FeatureCount = FeatureCount+2; %same as below below
+            if (Row <= 9) || (Row >= size(GaussianSmoothedImage,1)-7) || (Col <= 9) || (Col >= size(GaussianSmoothedImage,2)-7)
                 % skip if out of boundary
                 continue;
             end
@@ -187,16 +193,63 @@ for Octave = 1:OctaveNum
                     col = floor((col-1)/4)+1;
                     sitabin(sitaquantize(patchindx)+1,row,col) = sitabin(sitaquantize(patchindx)+1,row,col) + Smag(patchindx);
                 end
+                sitabin = reshape(sitabin,[],1);
                 sitabin = bsxfun(@times,sitabin,sum(sitabin.^2,1).^(-0.5)); % normalize the vector
                 sitabin(sitabin > 0.2) = 0.2; % threshold the maximum value as 0.2
                 sitabin = bsxfun(@times,sitabin,sum(sitabin.^2,1).^(-0.5)); % renormalize
                 sift(ssc,:,DomOriIndx) = sitabin(:);
             end
+            if length(DominantOriSita)>2
+                FeatureCount = FeatureCount+2;
+            else 
+                FeatureCount = FeatureCount+ length(DominantOriSita);
+            end
+            %FeatureCount = FeatureCount+2;     %some was skipped by line 158
         end
+        %FeatureCount = FeatureCount+2*length(SSCindx);     %same as below
+        %fprintf('length = %d\n',length(DominantOriSita));
         DominantOrientation{Octave,DiffMinMaxMapIndx} = DomOri;
         SIFT{Octave,DiffMinMaxMapIndx} = sift;
     end 
 end
+
+locs = zeros(FeatureCount,4);
+descriptors = zeros(FeatureCount,128);
+count = 1;
+for Octave = 1:OctaveNum
+    Sigma = SigmaOrigin * 2^(Octave-1); % when up to a new octave, double the sigma
+    for DiffMinMaxMapIndx = 1:size(DiffMinMaxMap,2)
+        stack = DiffMinMaxMapIndx+1;
+        SigmaScale = Sigma * ScaleFactor^(stack-2);
+        for k = 1:2
+            if isempty(DominantOrientation{Octave,DiffMinMaxMapIndx})
+                continue
+            end
+            DomOri = DominantOrientation{Octave,DiffMinMaxMapIndx}(:,:,k);
+            Descrip = SIFT{Octave,DiffMinMaxMapIndx}(:,:,k);
+            Map = DiffMinMaxMapNoEdge{Octave,DiffMinMaxMapIndx};
+            SSCindx = find(Map); % Scale-Space-Corner Index
+            for ssc = 1:length(SSCindx)
+                if DomOri(ssc,1)==0 && DomOri(ssc,2)==0
+                    continue;
+                end
+                [Row,Col] = ind2sub([size(Map,1),size(Map,2)], SSCindx(ssc));
+                Row = Row*(2^(Octave-1))+1; Col = Col*(2^(Octave-1))+1; % offset = [1,1];
+                if (Row > size(img,1)) || (Col > size(img,2))
+                    fprintf('should not happen : (Row,Col) = (%d, %d)\n',Row,Col);
+                    continue
+                end
+                locs(count,1:4) = [Row, Col, SigmaScale, DomOri(ssc,1)-pi];
+                descriptors(count,1:128) = Descrip(ssc,:);              
+                count = count + 1;
+            end
+        end
+    end
+end
+
+fprintf('Number of feature points... %d\n',FeatureCount);
+
+%{
 
 %% Show results (this part of code is just for verification, and is a mess...)
 % close all;
@@ -212,7 +265,9 @@ end
 imgtemp4 = img*0.5;
 figure,imshow(uint8(imgtemp4*255));
 for i = 1:3
+    Sigma = SigmaOrigin * 2^(i-1);
     for j = 1:3
+        SigmaScale = Sigma * ScaleFactor^(j-2);
         for k = 1:2
             if isempty(DominantOrientation{i,j})
                 continue
@@ -229,7 +284,7 @@ for i = 1:3
                 if (Row > size(img,1)) || (Col > size(img,2))
                     continue
                 end
-                quiver(Col,Row,DOx(ssc),DOy(ssc),'r')
+                quiver(Col,Row,DOx(ssc)*SigmaScale*2,DOy(ssc)*SigmaScale*2,'r')
             end
         end
     end
@@ -262,34 +317,26 @@ figure,imshow(uint8(imgtemp5*255));
 %-------------------------------------------
 imgtemp6 = img*0.5; %only for lower brightness
 FeatureCount = 0;
-locs = zeros(10000,4);%feature points may < 10000
-for Octave = 1:OctaveNum
+for i = 1:3
     for j = 1:3
         for k = 1:2
-            if isempty(DominantOrientation{Octave,j})
+            if isempty(DominantOrientation{i,j})
                 continue
             end
-            Map = DiffMinMaxMapNoEdge{Octave,j};
+            Map = DiffMinMaxMapNoEdge{i,j};
             SSCindx = find(Map); % Scale-Space-Corner Index
             for ssc = 1:length(SSCindx)
                 [Row,Col] = ind2sub([size(Map,1),size(Map,2)], SSCindx(ssc));
-                Row = Row*2^(Octave-1)+1; Col = Col*2^(Octave-1)+1; % offset = [1,1];
+                Row = Row*2^(i-1)+1; Col = Col*2^(i-1)+1; % offset = [1,1];
                 if (Row > size(img,1)) || (Col > size(img,2))
                     continue
                 end
-                FeatureCount = FeatureCount + 1;
-                locs(FeatureCount,1) = Row;
-                locs(FeatureCount,2) = Col;
-                locs(FeatureCount,3) = 10*rand();%...should be scale
-                locs(FeatureCount,4) = rand();%...should be orientation
-                imgtemp6(Row,Col) = 1;
+                imgtemp5(Row,Col) = 1;
             end
+            FeatureCount = FeatureCount + size(SSCindx,1);
         end
     end
 end
-
-locs = locs(1:FeatureCount,:);
 figure,imshow(uint8(imgtemp6*255));
 fprintf('Number of feature points... %d\n',FeatureCount);
-
-showkeys(img,locs);
+%}
