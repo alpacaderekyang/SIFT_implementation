@@ -142,7 +142,8 @@ DominantOrientation = cell(size(DiffMinMaxMap));
 SIFT = cell(size(DiffMinMaxMap));
 FeatureCount = 0;
 for Octave = 1:OctaveNum
-    Sigma = SigmaOrigin * 2^(Octave-1); % when up to a new octave, double the sigma
+    %Sigma = SigmaOrigin * 2^(Octave-1); % when up to a new octave, double the sigma
+    Sigma = SigmaOrigin;%...modified here
     for DiffMinMaxMapIndx = 1:size(DiffMinMaxMap,2)
         stack = DiffMinMaxMapIndx+1;
         SigmaScale = Sigma * ScaleFactor^(stack-2);
@@ -193,7 +194,7 @@ for Octave = 1:OctaveNum
                     col = floor((col-1)/4)+1;
                     sitabin(sitaquantize(patchindx)+1,row,col) = sitabin(sitaquantize(patchindx)+1,row,col) + Smag(patchindx);
                 end
-                sitabin = reshape(sitabin,[],1);
+                sitabin = reshape(sitabin,[],1); %...modified here, normalize
                 sitabin = bsxfun(@times,sitabin,sum(sitabin.^2,1).^(-0.5)); % normalize the vector
                 sitabin(sitabin > 0.2) = 0.2; % threshold the maximum value as 0.2
                 sitabin = bsxfun(@times,sitabin,sum(sitabin.^2,1).^(-0.5)); % renormalize
@@ -220,7 +221,7 @@ for Octave = 1:OctaveNum
     Sigma = SigmaOrigin * 2^(Octave-1); % when up to a new octave, double the sigma
     for DiffMinMaxMapIndx = 1:size(DiffMinMaxMap,2)
         stack = DiffMinMaxMapIndx+1;
-        SigmaScale = Sigma * ScaleFactor^(stack-2);
+        SigmaScale = Sigma * ScaleFactor^(stack-2); %...why?
         for k = 1:2
             if isempty(DominantOrientation{Octave,DiffMinMaxMapIndx})
                 continue
@@ -239,8 +240,8 @@ for Octave = 1:OctaveNum
                     fprintf('should not happen : (Row,Col) = (%d, %d)\n',Row,Col);
                     continue
                 end
-                locs(count,1:4) = [Row, Col, SigmaScale, DomOri(ssc,1)-pi];
-                descriptors(count,1:128) = Descrip(ssc,:);              
+                locs(count,1:4) = [Row, Col, SigmaScale, DomOri(ssc,1)-pi];%...arrange keypoint location scale orientation
+                descriptors(count,1:128) = Descrip(ssc,:); %...arrange keypoint descriptor
                 count = count + 1;
             end
         end
